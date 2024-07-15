@@ -69,7 +69,7 @@ struct test *createListNode(int x)
 }
 
 // 动态创建节点-返回头节点法----头插法
-struct test *insertFromHead(struct test *head, int data)
+struct test *insert_fromHead(struct test *head, int data)
 {
     struct test *new;
     new = (struct test *)malloc(sizeof(struct test));
