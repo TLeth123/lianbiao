@@ -122,16 +122,26 @@ unsigned char myarr2[] = {0x11, 0x22, 0x33, 0x77, 0x88, 0x99, 0xaa};
 int open_size = 0;    // 开辟的总空间
 int release_size = 0; // 释放的总空间
 
-// 定义一个结构体
+// 定义内存结构体
+struct mem_block
+{
+    unsigned char *arr_address; // 内存地址
+    size_t arr_size;            // 分配的大小
+};
+
+// 定义链表结构体
 struct test
 {
     int num;
     unsigned char *arr;
+    int data_size;
+    struct mem_block info;
     struct test *next;
 };
+struct test *head = NULL;
 
 // 封装一个新malloc函数统计开辟的空间
-void *my_malloc(size_t size, int *my_open_size)
+void *my_malloc(size_t size)
 {
     void *p = malloc(size);
     if (p == NULL)
@@ -139,16 +149,28 @@ void *my_malloc(size_t size, int *my_open_size)
         printf("Memory allocation failed!\n");
         return NULL;
     }
-
-    *my_open_size += size;
+    open_size += size;
     return p;
 }
 
 // 封装一个新free函数统计释放的空间
-void my_free(void *p, int my_release_size)
+void my_free(void *p)
 {
-    free(p);
-    release_size += my_release_size;
+    struct test *current = p;
+    // printf("%d %d\n", current->info.arr_address, current->arr);
+    if (current->info.arr_address == current->arr) // 释放节点的数组
+    {
+        printf("\n释放节点的数组,大小为%d个字节\n", current->info.arr_size);
+        release_size += current->info.arr_size;
+        free(current->arr);
+        current->arr = NULL;
+    }
+    else // 释放节点
+    {
+        printf("释放节点,大小为%d个字节\n", sizeof(struct test));
+        release_size += sizeof(struct test);
+        free(current);
+    }
 }
 
 // 遍历链表
@@ -176,17 +198,20 @@ void printfLink(struct test *head)
 // 创建不被释放的头节点
 struct test *creat_head_node()
 {
-    struct test *newnode = (struct test *)my_malloc(sizeof(struct test), &open_size);
+    struct test *newnode = (struct test *)my_malloc(sizeof(struct test));
     if (newnode == NULL)
     {
         printf("creat ListNode error\n");
         return NULL;
     }
     newnode->num = 2;
-    newnode->arr = (unsigned char *)my_malloc(2 * sizeof(unsigned char), &open_size);
+    newnode->arr = (unsigned char *)my_malloc(2 * sizeof(unsigned char));
+    newnode->info.arr_size = 2 * sizeof(unsigned char);
     newnode->next = NULL;
     newnode->arr[0] = 0xaa;
     newnode->arr[1] = '\0';
+    newnode->data_size = strlen(newnode->arr);
+    newnode->info.arr_address = newnode->arr;
     if (newnode->arr == NULL)
     {
         printf("内存分配失败\n");
@@ -194,7 +219,9 @@ struct test *creat_head_node()
         return NULL;
     }
     int struct_size = sizeof(struct test) + 2 * sizeof(unsigned char);
-    printf("创建头节点，开辟了%d个字节空间\n", struct_size);
+    printf("创建了头节点，开辟了%d个字节空间,数据为 %d 个字节", struct_size, newnode->data_size);
+    printf("data_size = %d,arr_size = %d\n", strlen(newnode->arr), newnode->info.arr_size);
+
     return newnode;
 }
 
@@ -204,7 +231,8 @@ struct test *creat_head_node()
 */
 struct test *creat_link_arr(int arr_num)
 {
-    struct test *newnode = (struct test *)my_malloc(sizeof(struct test), &open_size);
+    struct test *newnode = (struct test *)my_malloc(sizeof(struct test));
+
     if (newnode == NULL)
     {
         printf("BuySListNode error\n");
@@ -212,7 +240,10 @@ struct test *creat_link_arr(int arr_num)
     }
     newnode->num = arr_num;
     newnode->next = NULL;
-    newnode->arr = (unsigned char *)my_malloc((arr_num + 1) * sizeof(unsigned char), &open_size);
+    newnode->arr = (unsigned char *)my_malloc((arr_num + 1) * sizeof(unsigned char));
+    newnode->info.arr_size = (arr_num + 1) * sizeof(unsigned char);
+    // newnode->data_size = (arr_num +1) * sizeof(unsigned char);
+
     if (newnode->arr == NULL)
     {
         printf("内存分配失败\n");
@@ -220,7 +251,7 @@ struct test *creat_link_arr(int arr_num)
         return NULL;
     }
     int struct_size = sizeof(struct test) + sizeof(unsigned char) * (arr_num + 1);
-    printf("创建一个节点，开辟了%d字节空间, ", struct_size);
+    printf("创建一个节点，开辟了%d个字节空间, ", struct_size);
     return newnode;
 }
 
@@ -273,6 +304,9 @@ void insert_from_tail1(struct test *head, int num, unsigned char arr[])
     struct test *newnode = creat_link_arr(num);
     memcpy(newnode->arr, arr, num);
     newnode->arr[num] = '\0'; // 在数组末尾加一个结束的标志==='\0'
+    newnode->data_size = strlen(newnode->arr);
+    newnode->info.arr_address = newnode->arr;
+    printf("data_size = %d,arr_size = %d", strlen(newnode->arr), newnode->info.arr_size);
     printf("开辟的数组元素个数为%d,写入的元素个数为：%d\n", num, strlen(newnode->arr));
     while (p->next != NULL)
     {
@@ -298,12 +332,12 @@ void read_node_oldest(struct test *head)
         for (int i = 0; i < p->num; i++)
         {
             printf("%02x ", p->arr[i]);
-        }
+        };
 
         temp = p;
         head->next = p->next;
-
-        my_free(temp->arr, sizeof(unsigned char) * (p->num + 1));
+        // printf("%d\n", temp->arr);
+        my_free(temp); // 释放arr
         temp->arr = NULL;
         int arr_size = 1;
         int node_size = 1;
@@ -312,7 +346,7 @@ void read_node_oldest(struct test *head)
         {
             arr_size = 0;
         }
-        my_free(temp, sizeof(struct test));
+        my_free(temp);
         temp = NULL;
         printf("\n");
         p = head->next;
@@ -320,9 +354,9 @@ void read_node_oldest(struct test *head)
         {
             node_size = 0;
         }
-        printf("删除节点,原数据结构体占空间大小为 %d 个字节,申请的数组元素个数为 %d ,占 %d 个字节空间,读取的元素个数为：%d,释放数值后剩余 %d 个字节空间,删除节点后剩余 %d 个字节空间\n",
-               struct_size, apply_arr_num, sizeof(unsigned char) * apply_arr_num, reality_arr_num, arr_size, node_size);
-        printf("\n");
+        // printf("删除节点,原数据结构体占空间大小为 %d 个字节,申请的数组元素个数为 %d ,占 %d 个字节空间,读取的元素个数为：%d,释放数值后剩余 %d 个字节空间,删除节点后剩余 %d 个字节空间\n",
+        //        struct_size, apply_arr_num, sizeof(unsigned char) * apply_arr_num, reality_arr_num, arr_size, node_size);
+        // printf("\n");
     }
 }
 
@@ -350,7 +384,7 @@ void delete_link_list_form_behind(struct test *head)
         int struct_size = sizeof(tail->num) + sizeof(tail->next) + sizeof(unsigned char) * strlen(tail->arr) + sizeof(tail->next);
 
         // 释放尾节点的数据空间
-        free(tail->arr);
+        my_free(tail); // 释放数组空间
         tail->arr = NULL;
         int arr_size = 1;
         int node_size = 1;
@@ -361,7 +395,7 @@ void delete_link_list_form_behind(struct test *head)
         }
 
         // 释放尾节点
-        free(tail);
+        my_free(tail);
         tail = NULL;
         // 把尾节点的next指向空
         prev_tail->next = NULL;
@@ -389,7 +423,7 @@ int get_link_list_node_num(struct test *head)
 
 int main()
 {
-    struct test *head = creat_head_node();
+    head = creat_head_node();
 
     int myarr2_num = sizeof(myarr2) / sizeof(myarr2[0]);
     insert_from_tail1(head, myarr2_num, myarr2);
@@ -397,7 +431,7 @@ int main()
     insert_from_tail1(head, 20, myarr);
     insert_from_tail1(head, 30, myarr);
     insert_from_tail1(head, 40, myarr);
-    insert_from_tail1(head, 100, myarr);
+    // insert_from_tail1(head, 100, myarr);
     printfLink(head);
 
     // delete_link_list_form_behind(head);
@@ -411,6 +445,8 @@ int main()
     printfLink(head);
     printf("总共开辟的空间大小为：%d\n", open_size);
     printf("总共释放的空间大小为：%d\n", release_size);
-    printf("剩余开辟-释放的空间大小为：%d\n", open_size - release_size);
+    printf("开辟空间-释放的空间大小为：%d,头节点大小为 %d\n",
+           open_size - release_size, sizeof(struct test) + head->info.arr_size);
+
     return 0;
 }
